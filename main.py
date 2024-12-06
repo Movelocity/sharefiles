@@ -20,26 +20,32 @@ def signal_handler(signum, frame):
     # 如果正在等待输入，则退出程序
     if waiting_for_input:
         print("\n检测到Ctrl+C，正在退出程序...")
+        should_restart = False
         if server:
             server.should_exit = True
         return
     
-    print("\n检测到Ctrl+C，请输入新的文件夹路径（直接回车保持当前路径）：")
+    print("\n检测到Ctrl+C，请输入新的文件夹路径（直接回车保持当前路径，输入q退出）：")
     waiting_for_input = True  # 设置等待输入标志
     try:
+        waiting_for_input = True  # 设置等待输入标志
         new_path = input(">>> ").strip()
-        if new_path:
-            if not os.path.isdir(new_path):
-                print("提供的路径不是一个有效的文件夹，保持当前路径")
-            else:
-                base_directory = new_path
-                print(f"文件夹路径已更新为: {base_directory}")
-                should_restart = True  # 标记需要重启服务器
+        waiting_for_input = False  # 重置等待输入标志
+        if new_path == "q":
+            print("退出程序")
+            should_restart = False
+            return
+
+        if not os.path.isdir(new_path):
+            print("提供的路径不是一个有效的文件夹，保持当前路径")
+        else:
+            base_directory = new_path
+            print(f"文件夹路径已更新为: {base_directory}")
+        should_restart = True  # 标记需要重启服务器
         if server:
             server.should_exit = True  # 关闭当前服务器实例
     finally:
-        waiting_for_input = False  # 重置等待输入标志
-
+        pass
 @app.get("/")
 async def root():
     with open('index.html', 'r', encoding='utf-8') as f:
@@ -126,7 +132,7 @@ if __name__ == "__main__":
             if not should_restart:  # 如果不是要重启，则退出循环
                 break
         except Exception as e:
-            print(f'发生错误: {str(e)}')
+            # print(f'发生错误: {str(e)}')
             break
         
     print("服务器已关闭。")
