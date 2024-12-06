@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>文件浏览器</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --primary-color: #6d84b4;
+    --bg-color: #0f172a;
+    --surface-color: #1e293b;
+    --hover-color: #334155;
+    --text-primary: #f8fafc;
+    --text-secondary: #94a3b8;
+    --radius: 8px;
+  }
+
+  * {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+  }
+
+  body {
+    background-color: var(--bg-color);
+    color: var(--text-primary);
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    line-height: 1.5;
+  }
+
+  .cursor-pointer {
+    cursor: pointer;
+  }
+
+  .container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 2rem;
+  }
+
+  .header {
+    margin-bottom: 2rem;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid var(--surface-color);
+  }
+
+  .breadcrumb {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+  }
+
+  .breadcrumb-item {
+    cursor: pointer;
+    transition: color 0.2s;
+  }
+
+  .breadcrumb-item:hover {
+    color: var(--text-primary);
+  }
+
+  .breadcrumb-separator {
+    color: var(--text-secondary);
+  }
+
+  .file-list {
+    list-style-type: none;
+    background: var(--surface-color);
+    border-radius: var(--radius);
+    overflow: hidden;
+  }
+
+  .file-list-item {
+    padding: 0.75rem 1rem;
+    transition: all 0.2s ease;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  }
+
+  .file-list-item:last-child {
+    border-bottom: none;
+  }
+
+  .file-list-item:hover {
+    background-color: var(--hover-color);
+  }
+
+  .file-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+  }
+
+  .file-info-primary {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    flex: 1;
+  }
+
+  .file-icon {
+    font-size: 1.25rem;
+    width: 24px;
+    text-align: center;
+  }
+
+  .file-name {
+    font-weight: 500;
+    flex: 1;
+  }
+
+  .file-info-secondary {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    color: var(--text-secondary);
+    font-size: 0.875rem;
+  }
+
+  .file-size, .file-date {
+    min-width: 100px;
+    text-align: right;
+  }
+
+  .action-btn {
+    padding: 0.25rem 0.75rem;
+    border-radius: var(--radius);
+    border: 1px solid var(--primary-color);
+    background: transparent;
+    color: var(--primary-color);
+    cursor: pointer;
+    font-size: 0.875rem;
+    transition: all 0.2s;
+  }
+
+  .action-btn:hover {
+    background: var(--primary-color);
+    color: white;
+  }
+
+  a {
+    color: inherit;
+    text-decoration: none;
+  }
+
+  .loading {
+    display: none;
+    text-align: center;
+    padding: 2rem;
+    color: var(--text-secondary);
+  }
+
+  .loading.active {
+    display: block;
+  }
+
+  @media (max-width: 768px) {
+    .container {
+      padding: 1rem;
+    }
+
+    .file-info-secondary {
+      display: none;
+    }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <div id="breadcrumb" class="breadcrumb">
+      <span class="breadcrumb-item" onclick="fetchFiles('')">根目录</span>
+    </div>
+  </div>
+  <div id="loading" class="loading">
+    ⌛ 加载中...
+  </div>
+  <ul id="file-list" class="file-list"></ul>
+</div>
+
+<script>
+let pathStack = [''];
+
+function showLoading() {
+  document.getElementById('loading').classList.add('active');
+  document.getElementById('file-list').style.display = 'none';
+}
+
+function hideLoading() {
+  document.getElementById('loading').classList.remove('active');
+  document.getElementById('file-list').style.display = 'block';
+}
+
+async function fetchFiles(path = '') {
+  try {
+    showLoading();
+    const response = await fetch('/files-detail' + path);
+    if (!response.ok) {
+      throw new Error('Failed to fetch files');
+    }
+    const files = await response.json();
+    renderFileList(files, path);
+    updateBreadcrumb(path);
+    if (!pathStack.includes(path)) {
+      pathStack.push(path);
+    }
+  } catch (error) {
+    console.error('Error:', error);
+  } finally {
+    hideLoading();
+  }
+}
+
+function formatBytes(bytes) {
+  if (bytes < 0) return ''+bytes;
+  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+  let index = 0;
+  while (bytes >= 1024 && index < units.length - 1) {
+    bytes /= 1024;
+    index++;
+  }
+  return `${bytes.toFixed(1)} ${units[index]}`;
+}
+
+function formatDate(dateString) {
+  const now = new Date();
+  const date = new Date(dateString);
+  const diff = now - date;
+  const seconds = Math.floor(diff / 1000);
+  const minutes = Math.floor(seconds / 60);
+  const hours = Math.floor(minutes / 60);
+  const days = Math.floor(hours / 24);
+
+  // 如果是今天的文件
+  if (days === 0) {
+    if (hours === 0) {
+      if (minutes === 0) {
+        return '刚刚';
+      }
+      return `${minutes}分钟前`;
+    }
+    return `${hours}小时前`;
+  }
+  
+  // 如果是昨天的文件
+  if (days === 1) {
+    return '昨天 ' + date.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
+  }
+  
+  // 如果是今年的文件
+  if (date.getFullYear() === now.getFullYear()) {
+    return date.toLocaleDateString('zh-CN', {
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit'
+    }).replace(/\//g, '-');
+  }
+  
+  // 如果是更早的文件
+  return date.toLocaleDateString('zh-CN', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit'
+  }).replace(/\//g, '-');
+}
+
+const copyToClipboard = async (text) => {
+  try {
+    await navigator.clipboard.writeText(text);
+  } catch (err) {
+    console.error('复制失败: ', err);
+  }
+}
+
+const copy_curl_command = (url) => {
+  const command = 'curl -O ' + location.origin + '/' + url;
+  copyToClipboard(command);
+}
+
+function updateBreadcrumb(path) {
+  const breadcrumb = document.getElementById('breadcrumb');
+  const parts = path.split('/').filter(Boolean);
+  
+  breadcrumb.innerHTML = '<span class="breadcrumb-item" onclick="fetchFiles(\'\')">根目录</span>';
+  
+  let currentPath = '';
+  parts.forEach((part, index) => {
+    currentPath += '/' + part;
+    breadcrumb.innerHTML += `
+      <span class="breadcrumb-separator">/</span>
+      <span class="breadcrumb-item" onclick="fetchFiles('${currentPath}')">${part}</span>
+    `;
+  });
+}
+
+function renderFileList(files, currentPath) {
+  const fileList = document.getElementById('file-list');
+  fileList.innerHTML = '';
+
+  files.sort((a, b) => {
+    if (a.type === b.type) {
+      return a.name.localeCompare(b.name);
+    }
+    return a.type === 'dir' ? -1 : 1;
+  });
+
+  files.forEach(file => {
+    const listItem = document.createElement('li');
+    listItem.className = 'file-list-item';
+    const fileUrl = `file${currentPath}/${file.name}`;
+
+    const isDirectory = file.type === 'dir';
+    const icon = isDirectory ? '📁' : '📄';
+    
+    listItem.innerHTML = `
+      <div class="file-row ${isDirectory? "cursor-pointer": ""}">
+        <div class="file-info-primary">
+          <span class="file-icon">${icon}</span>
+          <span class="file-name">${isDirectory ? 
+            `<span>${file.name}</span>` : 
+            `<a href="${fileUrl}" target="_blank">${file.name}</a>`}</span>
+        </div>
+        <div class="file-info-secondary">
+          ${!isDirectory ? `
+            <button class="action-btn" onclick="copy_curl_command('${fileUrl}')">
+              ⬇️ curl
+            </button>
+            <span class="file-size">${formatBytes(file.size)}</span>
+            <span class="file-date">${formatDate(file.modified_time)}</span>
+          ` : ''}
+        </div>
+      </div>
+    `;
+
+    if (isDirectory) {
+      listItem.onclick = (e) => {
+        if (e.target.tagName !== 'BUTTON') {
+          fetchFiles(`${currentPath}/${file.name}`);
+        }
+      };
+    }
+
+    fileList.appendChild(listItem);
+  });
+}
+
+// Initial fetch
+fetchFiles();
+</script>
+</body>
+</html>
