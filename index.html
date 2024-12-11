@@ -270,11 +270,37 @@ function formatDate(dateString) {
   }).replace(/\//g, '-');
 }
 
-const copyToClipboard = async (text) => {
+function copyToClipboard(text) {
   try {
-    await navigator.clipboard.writeText(text);
+    // 创建临时input元素
+    const tempInput = document.createElement('input');
+    
+    // 设置input的样式
+    tempInput.style.position = 'fixed';
+    tempInput.style.opacity = 0;
+    tempInput.style.top = '-1000px';
+    
+    // 将文本填入input
+    tempInput.value = text;
+    
+    // 将input添加到body
+    document.body.appendChild(tempInput);
+    
+    // 选中input中的文本
+    tempInput.select();
+    tempInput.setSelectionRange(0, 99999); // 对于移动设备
+    
+    // 执行复制命令
+    const successful = document.execCommand('copy');
+    
+    // 删除临时input
+    document.body.removeChild(tempInput);
+    
+    // 返回复制是否成功
+    return successful;
   } catch (err) {
-    console.error('复制失败: ', err);
+    console.error('无法复制文本: ', err);
+    return false;
   }
 }
 
