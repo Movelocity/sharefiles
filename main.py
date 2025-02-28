@@ -7,12 +7,51 @@ import datetime
 import signal
 import time
 import socket
+import json
 
 app = FastAPI()
 server = None  # 用于存储uvicorn服务器实例
 base_directory = "."
 waiting_for_input = False  # 用于标记是否正在等待用户输入
 should_restart = False  # 用于标记是否需要重启服务器
+path_history_file = "path_history.json"  # 存储历史路径的文件
+max_history_paths = 10  # 最多保存的历史路径数量
+
+def save_path_to_history(path):
+    """保存有效路径到历史记录文件"""
+    paths = load_path_history()
+    
+    # 如果路径已存在，先移除它（后面会重新添加到最前面）
+    if path in paths:
+        paths.remove(path)
+    
+    # 将新路径添加到列表开头
+    paths.insert(0, path)
+    
+    # 保持列表长度不超过最大值
+    if len(paths) > max_history_paths:
+        paths = paths[:max_history_paths]
+    
+    # 保存到文件
+    try:
+        with open(path_history_file, 'w', encoding='utf-8') as f:
+            json.dump(paths, f, ensure_ascii=False)
+    except Exception as e:
+        print(f"保存路径历史记录失败: {str(e)}")
+
+def load_path_history():
+    """加载历史路径记录"""
+    if not os.path.exists(path_history_file):
+        return []
+    
+    try:
+        with open(path_history_file, 'r', encoding='utf-8') as f:
+            paths = json.load(f)
+            # 过滤掉不存在的路径
+            return [p for p in paths if os.path.isdir(p)]
+    except Exception as e:
+        print(f"加载路径历史记录失败: {str(e)}")
+        return []
 
 def signal_handler(signum, frame):
     global base_directory, waiting_for_input, server, should_restart
@@ -40,12 +79,15 @@ def signal_handler(signum, frame):
             print("提供的路径不是一个有效的文件夹，保持当前路径")
         else:
             base_directory = new_path
+            # 保存有效路径到历史记录
+            save_path_to_history(base_directory)
             print(f"文件夹路径已更新为: {base_directory}")
         should_restart = True  # 标记需要重启服务器
         if server:
             server.should_exit = True  # 关闭当前服务器实例
     finally:
         pass
+
 @app.get("/")
 async def root():
     with open('index.html', 'r', encoding='utf-8') as f:
@@ -105,8 +147,33 @@ if __name__ == "__main__":
 
     # 从命令行获取文件夹路径
     if len(sys.argv) < 2:
-        print("请提供文件夹路径")
-        base_directory = input(">>> ")
+        # 加载历史路径
+        path_history = load_path_history()
+        
+        if path_history:
+            print("请选择一个历史路径或输入新的文件夹路径:")
+            for i, path in enumerate(path_history, 1):
+                print(f"{i}. {path}")
+            print("0. 输入新路径")
+            
+            choice = input("请选择 [0-{}]: ".format(len(path_history))).strip()
+            
+            if choice.isdigit():
+                choice_num = int(choice)
+                if 1 <= choice_num <= len(path_history):
+                    base_directory = path_history[choice_num - 1]
+                elif choice_num == 0:
+                    print("请输入新的文件夹路径:")
+                    base_directory = input(">>> ").strip()
+                else:
+                    print("无效选择，请输入文件夹路径:")
+                    base_directory = input(">>> ").strip()
+            else:
+                print("无效选择，请输入文件夹路径:")
+                base_directory = input(">>> ").strip()
+        else:
+            print("请提供文件夹路径:")
+            base_directory = input(">>> ").strip()
     else:
         base_directory = sys.argv[1]
 
@@ -114,6 +181,9 @@ if __name__ == "__main__":
     if not os.path.isdir(base_directory):
         print("提供的路径不是一个有效的文件夹")
         sys.exit(1)
+    
+    # 保存有效路径到历史记录
+    save_path_to_history(base_directory)
 
     # 设置信号处理器
     signal.signal(signal.SIGINT, signal_handler)
